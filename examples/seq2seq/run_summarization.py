@@ -35,8 +35,10 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
     DataCollatorForSeq2Seq,
+    DataCollatorForContrastiveSeq2Seq,
     HfArgumentParser,
     Seq2SeqTrainer,
+    ContrastiveSeq2SeqTrainer,
     Seq2SeqTrainingArguments,
     set_seed,
 )
@@ -371,23 +373,23 @@ def main():
         return
 
     # Get the column names for input/target.
-    dataset_columns = summarization_name_mapping.get(data_args.dataset_name, None)
-    if data_args.text_column is None:
-        text_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
-    else:
-        text_column = data_args.text_column
-        if text_column not in column_names:
-            raise ValueError(
-                f"--text_column' value '{data_args.text_column}' needs to be one of: {', '.join(column_names)}"
-            )
-    if data_args.summary_column is None:
-        summary_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
-    else:
-        summary_column = data_args.summary_column
-        if summary_column not in column_names:
-            raise ValueError(
-                f"--summary_column' value '{data_args.summary_column}' needs to be one of: {', '.join(column_names)}"
-            )
+    # dataset_columns = summarization_name_mapping.get(data_args.dataset_name, None)
+    # if data_args.text_column is None:
+    #     text_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
+    # else:
+    #     text_column = data_args.text_column
+    #     if text_column not in column_names:
+    #         raise ValueError(
+    #             f"--text_column' value '{data_args.text_column}' needs to be one of: {', '.join(column_names)}"
+    #         )
+    # if data_args.summary_column is None:
+    #     summary_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
+    # else:
+    #     summary_column = data_args.summary_column
+    #     if summary_column not in column_names:
+    #         raise ValueError(
+    #             f"--summary_column' value '{data_args.summary_column}' needs to be one of: {', '.join(column_names)}"
+    #         )
 
     # Temporarily set max_target_length for training.
     max_target_length = data_args.max_target_length
@@ -400,23 +402,25 @@ def main():
         )
 
     def preprocess_function(examples):
-        inputs = examples[text_column]
-        targets = examples[summary_column]
+        # id, source, target, summary_orig, summary_contrast_1, summary_contrast_2, summary_contrast_3
+        inputs = examples['source']
+        target_cols = ['target', 'summary_orig']
+        target_cols.extend(['summary_orig', 'summary_contrast_1', 'summary_contrast_2', 'summary_contrast_3'])
         inputs = [prefix + inp for inp in inputs]
         model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
+        for col in target_cols:
+            # Setup the tokenizer for targets
+            with tokenizer.as_target_tokenizer():
+                labels = tokenizer(examples[col], max_length=max_target_length, padding=padding, truncation=True)
 
-        # Setup the tokenizer for targets
-        with tokenizer.as_target_tokenizer():
-            labels = tokenizer(targets, max_length=max_target_length, padding=padding, truncation=True)
+            # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
+            # padding in the loss.
+            if padding == "max_length" and data_args.ignore_pad_token_for_loss:
+                labels['input_ids'] = [
+                    [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
+                ]
 
-        # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
-        # padding in the loss.
-        if padding == "max_length" and data_args.ignore_pad_token_for_loss:
-            labels["input_ids"] = [
-                [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
-            ]
-
-        model_inputs["labels"] = labels["input_ids"]
+            model_inputs[col] = labels['input_ids']
         return model_inputs
 
     if training_args.do_train:
@@ -465,7 +469,7 @@ def main():
 
     # Data collator
     label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
-    data_collator = DataCollatorForSeq2Seq(
+    data_collator = DataCollatorForContrastiveSeq2Seq(
         tokenizer,
         model=model,
         label_pad_token_id=label_pad_token_id,
@@ -508,7 +512,7 @@ def main():
         return result
 
     # Initialize our Trainer
-    trainer = Seq2SeqTrainer(
+    trainer = ContrastiveSeq2SeqTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,

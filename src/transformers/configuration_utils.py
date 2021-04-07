@@ -418,6 +418,7 @@ class PretrainedConfig(object):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
+        # TODO(griffin): Flip this to True to avoid server proxy issues
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)

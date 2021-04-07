@@ -227,6 +227,48 @@ def tolist(x: Union[List[Any], torch.Tensor]):
 
 
 @dataclass
+class DataCollatorForContrastiveSeq2Seq:
+    tokenizer: PreTrainedTokenizerBase
+    model: Optional[PreTrainedModel] = None
+    padding: Union[bool, str, PaddingStrategy] = True
+    max_length: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = None
+    label_pad_token_id: int = -100
+
+    def __call__(self, features, num_contrast=3):
+        label_cols = ['target', 'summary_orig']
+        label_cols.extend([f'summary_contrast_{i}' for i in range(1, num_contrast + 1)])
+        labels = [[feature[col] for feature in features] for col in label_cols]
+        # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
+        # same length to return tensors.
+
+        padding_side = self.tokenizer.padding_side
+        for i, label_col in enumerate(label_cols):
+            max_label_length = max(len(l) for l in labels[i])
+            for feature in features:
+                remainder = [self.label_pad_token_id] * (max_label_length - len(feature[label_col]))
+                feature[label_col] = (
+                    feature[label_col] + remainder if padding_side == 'right' else remainder + feature[label_col]
+                )
+
+        features = self.tokenizer.pad(
+            features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors='pt',
+        )
+
+        # prepare decoder_input_ids
+        if self.model is not None and hasattr(self.model, 'prepare_decoder_input_ids_from_labels'):
+            for label_col in label_cols:
+                decoder_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=features[label_col])
+                features[f'{label_col}_decoder_input_ids'] = decoder_input_ids
+
+        return features
+
+
+@dataclass
 class DataCollatorForSeq2Seq:
     """
     Data collator that will dynamically pad the inputs received, as well as the labels.

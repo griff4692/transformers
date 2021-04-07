@@ -366,6 +366,7 @@ if is_torch_available():
         "DataCollatorForLanguageModeling",
         "DataCollatorForPermutationLanguageModeling",
         "DataCollatorForSeq2Seq",
+        "DataCollatorForContrastiveSeq2Seq",
         "DataCollatorForSOP",
         "DataCollatorForTokenClassification",
         "DataCollatorForWholeWordMask",
@@ -950,6 +951,7 @@ if is_torch_available():
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
+    _import_structure["trainer_contrastive_seq2seq"] = ["ContrastiveSeq2SeqTrainer"]
 else:
     from .utils import dummy_pt_objects
 
@@ -1627,6 +1629,7 @@ if TYPE_CHECKING:
             DataCollatorForLanguageModeling,
             DataCollatorForPermutationLanguageModeling,
             DataCollatorForSeq2Seq,
+            DataCollatorForContrastiveSeq2Seq,
             DataCollatorForSOP,
             DataCollatorForTokenClassification,
             DataCollatorForWholeWordMask,
@@ -2110,6 +2113,7 @@ if TYPE_CHECKING:
         from .trainer import Trainer
         from .trainer_pt_utils import torch_distributed_zero_first
         from .trainer_seq2seq import Seq2SeqTrainer
+        from .trainer_contrastive_seq2seq import ContrastiveSeq2SeqTrainer
     else:
         from .utils.dummy_pt_objects import *
 
